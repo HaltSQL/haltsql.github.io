@@ -1,0 +1,1 @@
+"use strict";(globalThis.webpackChunkhaltsql_website||=[]).push([[3192],{3192(e,s,t){t.d(s,{createArchitectureServices:()=>c.S});var c=t(4549);t(184)}}]);

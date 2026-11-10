@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en" dir="ltr" class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-how-it-works/proxy-internals" data-has-hydrated="false">
+<head>
+<meta charset="UTF-8">
+<meta name="generator" content="Docusaurus v3.10.2">
+<title data-rh="true">Proxy internals | HaltSQL</title><meta data-rh="true" name="viewport" content="width=device-width,initial-scale=1"><meta data-rh="true" name="twitter:card" content="summary_large_image"><meta data-rh="true" property="og:url" content="https://haltsql.github.io/docs/how-it-works/proxy-internals"><meta data-rh="true" property="og:locale" content="en"><meta data-rh="true" name="docusaurus_locale" content="en"><meta data-rh="true" name="docsearch:language" content="en"><meta data-rh="true" name="docusaurus_version" content="current"><meta data-rh="true" name="docusaurus_tag" content="docs-default-current"><meta data-rh="true" name="docsearch:version" content="current"><meta data-rh="true" name="docsearch:docusaurus_tag" content="docs-default-current"><meta data-rh="true" property="og:title" content="Proxy internals | HaltSQL"><meta data-rh="true" name="description" content="How haltsql-proxy authenticates clients, verifies every statement on the PostgreSQL wire protocol, rewrites tenancy parameters and keeps denials in order."><meta data-rh="true" property="og:description" content="How haltsql-proxy authenticates clients, verifies every statement on the PostgreSQL wire protocol, rewrites tenancy parameters and keeps denials in order."><link data-rh="true" rel="icon" href="/img/favicon.svg"><link data-rh="true" rel="canonical" href="https://haltsql.github.io/docs/how-it-works/proxy-internals"><link data-rh="true" rel="alternate" href="https://haltsql.github.io/docs/how-it-works/proxy-internals" hreflang="en"><link data-rh="true" rel="alternate" href="https://haltsql.github.io/docs/how-it-works/proxy-internals" hreflang="x-default"><script data-rh="true" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"How it works","item":"https://haltsql.github.io/docs/how-it-works/architecture"},{"@type":"ListItem","position":2,"name":"Proxy internals","item":"https://haltsql.github.io/docs/how-it-works/proxy-internals"}]}</script><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&amp;family=Fira+Code:wght@400;500&amp;display=swap"><link rel="stylesheet" href="/assets/css/styles.1d7c56ec.css">
+<script src="/assets/js/runtime~main.c2921cda.js" defer="defer"></script>
+<script src="/assets/js/main.b7635c43.js" defer="defer"></script>
+</head>
+<body>
+<svg style="display: none;"><defs>
+<symbol id="theme-svg-external-link" viewBox="0 0 24 24"><path fill="currentColor" d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
+</defs></svg>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{const n=new URLSearchParams(window.location.search).entries();for(var[t,e]of n)if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}(),document.documentElement.setAttribute("data-announcement-bar-initially-dismissed",function(){try{return"true"===localStorage.getItem("docusaurus.announcement.dismiss")}catch(t){}return!1}())</script><div id="__docusaurus"><div role="region" aria-label="Skip to main content"><a class="skipToContent_fXgn" href="#__docusaurus_skipToContent_fallback">Skip to main content</a></div><div class="theme-announcement-bar announcementBar_mb4j" role="banner"><div class="announcementBarPlaceholder_vyr4"></div><div class="content_knG7 announcementBarContent_xLdY">HaltSQL 0.1 is pre-1.0: the verdict format and reason codes are stable, everything else may still change.</div><button type="button" aria-label="Close" class="clean-btn close closeButton_CVFx announcementBarClose_gvF7"><svg viewBox="0 0 15 15" width="14" height="14"><g stroke="currentColor" stroke-width="3.1"><path d="M.75.75l13.5 13.5M14.25.75L.75 14.25"></path></g></svg></button></div><nav aria-label="Main" class="theme-layout-navbar navbar navbar--fixed-top"><div class="navbar__inner"><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded="false" class="navbar__toggle clean-btn" type="button"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="2" d="M4 7h22M4 15h22M4 23h22"></path></svg></button><a class="navbar__brand" href="/"><div class="navbar__logo"><img src="/img/logo.svg" alt="HaltSQL" class="themedComponent_mlkZ themedComponent--light_NVdE"><img src="/img/logo.svg" alt="HaltSQL" class="themedComponent_mlkZ themedComponent--dark_xIcU"></div><b class="navbar__title text--truncate">HaltSQL</b></a><a aria-current="page" class="navbar__item navbar__link navbar__link--active" href="/docs">Docs</a><a class="navbar__item navbar__link" href="/docs/how-it-works/architecture">How it works</a><a class="navbar__item navbar__link" href="/#integrations">Integrations</a><a class="navbar__item navbar__link" href="/docs/policy-reference">Reference</a><a href="https://github.com/HaltSQL/HaltSQL/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">Changelog<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><div class="navbarSearchContainer_Bca1"><div class="navbar__search searchBarContainer_NW3z" dir="ltr"><svg aria-hidden="true" class="searchIcon_T3tP" focusable="false" viewBox="0 0 16 16"><path fill="currentColor" d="M6.02945 10.20327a4.17382 4.17382 0 1 1 4.17382-4.17382 4.15609 4.15609 0 0 1-4.17382 4.17382Zm9.69195 4.2199-4.8225-4.82338A5.88021 5.88021 0 0 0 12.058 6.02856 6.00467 6.00467 0 1 0 9.59979 10.8989l4.82338 4.82338a.89729.89729 0 0 0 1.29912 0 .89749.89749 0 0 0-.00087-1.29909Z"></path></svg><input placeholder="Search" aria-label="Search" class="navbar__search-input searchInput_YFbd" value=""><div class="loadingRing_RJI3 searchBarLoadingRing_YnHq"><div></div><div></div><div></div><div></div></div></div></div><a href="https://github.com/HaltSQL/HaltSQL" target="_blank" rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a><a class="navbar__item navbar__link navbar-cta" href="/docs/quickstart">Get started</a><div class="toggle_vylO colorModeToggle_DEke"><button class="clean-btn toggleButton_gllP toggleButtonDisabled_aARS" type="button" disabled="" title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP lightToggleIcon_pyhR"><path fill="currentColor" d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP darkToggleIcon_wfgR"><path fill="currentColor" d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"></path></svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" class="toggleIcon_g3eP systemToggleIcon_QzmC"><path fill="currentColor" d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"></path></svg></button></div></div></div><div role="presentation" class="navbar-sidebar__backdrop"></div></nav><div id="__docusaurus_skipToContent_fallback" class="theme-layout-main main-wrapper mainWrapper_z2l0"><div class="docsWrapper_hBAB"><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_sjWU" type="button"></button><div class="docRoot_UBD9"><aside class="theme-doc-sidebar-container docSidebarContainer_YfHR"><div class="sidebarViewport_aRkj"><div class="sidebar_njMd"><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_SIkG menuWithAnnouncementBar_GW3s"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/docs"><span class="categoryLinkLabel_W154">Get started</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs"><span class="linkLabel_WmDU">Overview</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/quickstart"><span class="linkLabel_WmDU">Quickstart</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/mcp"><span class="linkLabel_WmDU">Replace server-postgres (MCP)</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/faq"><span class="linkLabel_WmDU">FAQ</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/glossary"><span class="linkLabel_WmDU">Glossary</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="true" href="/docs/tutorials/secure-an-mcp-agent"><span class="categoryLinkLabel_W154">Tutorials</span></a></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/tutorials/secure-an-mcp-agent"><span class="linkLabel_WmDU">Secure an MCP agent</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/tutorials/multi-tenant-analytics-agent"><span class="linkLabel_WmDU">Multi-tenant analytics agent</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/tutorials/roll-out-a-policy-safely"><span class="linkLabel_WmDU">Roll out a policy safely</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist" href="/docs/integrations"><span class="categoryLinkLabel_W154">Integrations</span></a><button aria-label="Expand sidebar category &#x27;Integrations&#x27;" aria-expanded="false" type="button" class="clean-btn menu__caret"></button></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/docs/cli"><span class="categoryLinkLabel_W154">Features</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/docs/deployment"><span class="categoryLinkLabel_W154">Deploy</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/docs/console/architecture"><span class="categoryLinkLabel_W154">Console</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/docs/operations/production-checklist"><span class="categoryLinkLabel_W154">Operate</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/docs/security/overview"><span class="categoryLinkLabel_W154">Security and compliance</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--active" href="/docs/how-it-works/architecture"><span class="categoryLinkLabel_W154">How it works</span></a><button aria-label="Collapse sidebar category &#x27;How it works&#x27;" aria-expanded="true" type="button" class="clean-btn menu__caret"></button></div><ul class="menu__list"><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/architecture"><span class="linkLabel_WmDU">Architecture</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/verification-pipeline"><span class="linkLabel_WmDU">Verification pipeline</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/parser"><span class="linkLabel_WmDU">Parser</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/analyzer"><span class="linkLabel_WmDU">Analyzer</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/tenancy-proof"><span class="linkLabel_WmDU">Tenancy proof</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/policies-and-config"><span class="linkLabel_WmDU">Policies and config</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/deployment-modes"><span class="linkLabel_WmDU">Deployment modes</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current="page" tabindex="0" href="/docs/how-it-works/proxy-internals"><span class="linkLabel_WmDU">Proxy internals</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/server-internals"><span class="linkLabel_WmDU">Server internals</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/policy-lifecycle"><span class="linkLabel_WmDU">Policy lifecycle</span></a></li><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link" tabindex="0" href="/docs/how-it-works/assurance"><span class="linkLabel_WmDU">Assurance</span></a></li></ul></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/docs/policy-reference"><span class="categoryLinkLabel_W154">Reference</span></a></div></li><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item menu__list-item--collapsed"><div class="menu__list-item-collapsible"><a class="categoryLink_byQd menu__link menu__link--sublist menu__link--sublist-caret" role="button" aria-expanded="false" href="/docs/adr/parser-libpg-query"><span class="categoryLinkLabel_W154">Design decisions (ADRs)</span></a></div></li></ul></nav></div></div></aside><main class="docMainContainer_TBSr"><div class="container padding-top--md padding-bottom--lg"><div class="row"><div class="col docItemCol_VOVn"><div class="docItemContainer_Djhp"><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_Z_bl" aria-label="Breadcrumbs"><ul class="breadcrumbs"><li class="breadcrumbs__item"><a aria-label="Home page" class="breadcrumbs__link" href="/"><svg viewBox="0 0 24 24" class="breadcrumbHomeIcon_YNFT"><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill="currentColor"></path></svg></a></li><li class="breadcrumbs__item"><a class="breadcrumbs__link" href="/docs/how-it-works/architecture"><span>How it works</span></a></li><li class="breadcrumbs__item breadcrumbs__item--active"><span class="breadcrumbs__link">Proxy internals</span></li></ul></nav><div class="tocCollapsible_ETCw theme-doc-toc-mobile tocMobile_ITEo"><button type="button" class="clean-btn tocCollapsibleButton_TO0P">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Proxy internals</h1></header><p><code>haltsql-proxy</code> is a PostgreSQL wire-protocol (v3) firewall. This page
+explains how it works inside. For configuration and operations, see
+<a class="" href="/docs/proxy">../proxy.md</a>. For when to use it, see
+<a class="" href="/docs/how-it-works/deployment-modes">deployment-modes.md</a>.</p>
+<p>The code lives in <code>lib/pgwire</code> and <code>bin/proxy</code>:</p>
+<table><thead><tr><th>File</th><th>Role</th></tr></thead><tbody><tr><td><code>bin/proxy/main.ml</code></td><td>CLI: <code>run</code>, <code>validate</code>, <code>scram-verifier</code>; signal handling</td></tr><tr><td><code>lib/pgwire/proxy_config.ml</code></td><td>Loads and validates <code>kind: ProxyConfig</code>; builds each user&#x27;s or identity&#x27;s binding (policy + context)</td></tr><tr><td><code>lib/pgwire/server.ml</code></td><td>Listener, connection limits (total and per-address before authentication), TLS server config, hot reload and which sessions it ends, graceful shutdown</td></tr><tr><td><code>lib/pgwire/session.ml</code></td><td>One client connection: startup, authentication, upstream <code>search_path</code> check, the enforcing relay, ending at a transaction boundary</td></tr><tr><td><code>lib/pgwire/enforce.ml</code></td><td>Decisions: verify, transaction-control allowlist, Bind rewriting, denial fields</td></tr><tr><td><code>lib/pgwire/stmt_state.ml</code></td><td>Prepared-statement bookkeeping across pipelined <code>Sync</code> segments</td></tr><tr><td><code>lib/pgwire/wire.ml</code></td><td>Message codecs</td></tr><tr><td><code>lib/pgwire/scram.ml</code></td><td>Server side of SCRAM-SHA-256</td></tr><tr><td><code>lib/pgwire/upstream.ml</code></td><td>Connects to the real server (TLS, authentication, pinned <code>search_path</code>); forwards cancel requests</td></tr><tr><td><code>lib/pgwire/paudit.ml</code></td><td>The audit log: hash-chained records, sinks, failure policies</td></tr><tr><td><code>lib/pgwire/offload.ml</code></td><td>Bounded thread pool for verification and audit file writes</td></tr><tr><td><code>lib/pgwire/plog.ml</code></td><td>Operational JSON logs on stderr</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="architecture-and-trust">Architecture and trust<a href="#architecture-and-trust" class="hash-link" aria-label="Direct link to Architecture and trust" title="Direct link to Architecture and trust" translate="no">​</a></h2>
+<p>The proxy sits on the only network path from untrusted clients to the
+database. The client holds a proxy credential. Only the proxy holds the
+database credential.</p>
+<!-- -->
+<p>Four properties follow from this layout:</p>
+<ol>
+<li class=""><strong>The client cannot skip verification.</strong> Every <code>Query</code> and <code>Parse</code> goes
+through <code>Haltsql.verify</code> before anything is forwarded.</li>
+<li class=""><strong>The client cannot choose its policy or tenant.</strong> Both are bound to the
+authenticated identity in the config, not to anything in the startup
+packet or the SQL.</li>
+<li class=""><strong>The forwarded SQL is the verified SQL.</strong> The SQL bytes sent upstream are
+always byte for byte the bytes that were verified. Only <code>Bind</code> parameter
+values for tenancy parameters are rewritten.</li>
+<li class=""><strong>The server reads names the way the verifier did.</strong> The upstream
+session&#x27;s <code>search_path</code> is set from the bound policy and confirmed before
+the first statement, and a session keeps one policy for its whole life.</li>
+</ol>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="startup-and-authentication">Startup and authentication<a href="#startup-and-authentication" class="hash-link" aria-label="Direct link to Startup and authentication" title="Direct link to Startup and authentication" translate="no">​</a></h2>
+<p><code>Session.run</code> handles everything up to the first <code>ReadyForQuery</code>. Startup and
+authentication together must finish within <code>limits.auth_timeout_seconds</code>
+(default 30), otherwise the client gets <code>FATAL 08006</code>.</p>
+<!-- -->
+<p>Details that matter for security:</p>
+<ul>
+<li class=""><strong>Slots before authentication.</strong> A connection counts against
+<code>limits.max_connections</code> from accept. Until it has authenticated it also
+counts against <code>limits.max_unauthenticated_per_ip</code> (default 20) for its
+source address; the connection over that cap is refused at accept with
+<code>FATAL 53300</code>. <code>Server</code> keeps the per-address counter and decrements it
+when <code>Session</code> reports a successful authentication or the connection ends.</li>
+<li class=""><strong>TLS.</strong> An <code>SSLRequest</code> is answered with <code>S</code> and a TLS handshake when
+<code>tls</code> is configured, otherwise <code>N</code>. Plaintext bytes pipelined after the
+<code>SSLRequest</code> are a protocol violation (CVE-2021-23214). <code>GSSENCRequest</code> is
+always refused with <code>N</code>. With <code>tls.required: true</code> (the default), a client
+that did not upgrade gets <code>FATAL 28000</code>.</li>
+<li class=""><strong>Startup parameters.</strong> <code>user</code> is required. <code>database</code> must equal
+<code>upstream.database</code> (otherwise <code>3D000</code>). Any <code>replication</code> parameter is
+refused. Only a printable <code>application_name</code> (63 bytes or less) is
+forwarded. <code>options</code> and every other parameter are ignored, so a client
+cannot set GUCs such as <code>search_path</code>. A newer protocol minor version or
+<code>_pq_.*</code> options get <code>NegotiateProtocolVersion</code> for 3.0.</li>
+<li class=""><strong>SCRAM</strong> (<code>auth.method: scram</code>). The proxy implements the server side of
+SCRAM-SHA-256 (no channel binding) and stores only verifiers in
+PostgreSQL&#x27;s format (<code>haltsql-proxy scram-verifier</code> makes one). An unknown
+user goes through a full fake exchange using a per-process mock secret, so
+user names cannot be probed. Every failure is the same
+<code>FATAL 28P01 password authentication failed for user &quot;...&quot;</code>.</li>
+<li class=""><strong>Client certificates</strong> (<code>auth.method: cert</code>). The TLS layer verifies the
+chain against <code>tls.client_ca</code>. The proxy then matches the leaf&#x27;s subject CN
+or a URI SAN (<code>spiffe_id</code>) against <code>auth.identities</code>. The startup user name
+is not used for authorization.</li>
+<li class=""><strong>The binding.</strong> Authentication returns a <code>binding</code>: the policy name, the
+loaded <code>Policy.t</code>, and the <code>Context.t</code> from the config. Validation already
+checked that the context supplies every value the policy&#x27;s tenancy needs.
+Everything after this point uses only the binding.</li>
+<li class=""><strong>Upstream sanity.</strong> The proxy always sends <code>client_encoding=UTF8</code>. If the
+server ever reports a different <code>client_encoding</code>, or
+<code>standard_conforming_strings</code> other than <code>on</code>, the session is terminated.
+The verified bytes must mean the same thing to Postgres as they did to the
+parser.</li>
+<li class=""><strong>Pinned <code>search_path</code>.</strong> The verifier resolves an unqualified name through
+the policy&#x27;s <code>search_path</code> (<code>pg_catalog</code> first unless the policy places it).
+PostgreSQL resolves it through the session&#x27;s <code>search_path</code>, which by
+default comes from <code>ALTER ROLE</code> / <code>ALTER DATABASE</code> or <code>postgresql.conf</code> and
+has nothing to do with the policy. So <code>Upstream.connect</code> puts
+<code>search_path</code> in the upstream startup packet (which overrides role and
+database settings): the policy&#x27;s schemas, each double-quoted, then
+<code>pg_temp</code>. <code>pg_temp</code> is explicit and last because PostgreSQL otherwise
+searches temporary tables before everything else. When the upstream
+reports <code>ReadyForQuery</code>, <code>Session.confirm_search_path</code> sends
+<code>SHOW search_path</code>, parses the answer the way PostgreSQL parses the
+setting (<code>Upstream.parse_search_path</code>) and compares the schema lists. The
+client&#x27;s <code>ReadyForQuery</code> is held back until the comparison passed, so no
+client statement can be forwarded before it; a mismatch ends the session
+with <code>FATAL 08006</code>. PostgreSQL 18 and later also report the setting as a
+<code>ParameterStatus</code>, at startup and on every change, and a reported value
+that differs ends the session. The path belongs to the session&#x27;s binding,
+which never changes (see <a href="#lifecycle" class="">Lifecycle</a>).</li>
+<li class=""><strong>Upstream transport.</strong> <code>upstream.tls.mode</code> is <code>disable</code> (the default),
+<code>require</code> (encrypted, any certificate accepted) or <code>verify-full</code> (chain
+and host verified); only the last authenticates the database. The proxy
+never sends a cleartext password without TLS, and refuses MD5
+authentication without TLS unless <code>upstream.allow_insecure_auth</code> is set.
+<code>Proxy_config.transport_notes</code> produces the warning logged at start when
+TLS is off towards a host that is not a loopback address.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="the-enforcing-relay">The enforcing relay<a href="#the-enforcing-relay" class="hash-link" aria-label="Direct link to The enforcing relay" title="Direct link to The enforcing relay" translate="no">​</a></h2>
+<p>After startup, four promises run side by side (<code>Lwt.pick</code>; the first to finish
+ends the session):</p>
+<ul>
+<li class=""><code>client_loop</code> reads one frontend message at a time and passes it to
+<code>handle_client_message</code>, which verifies, rewrites, replaces or drops it.</li>
+<li class=""><code>upstream_loop</code> reads backend messages, updates statement bookkeeping, swaps
+injected errors for denial errors, and relays everything else.</li>
+<li class=""><code>lifetime_timer</code> asks the session to end after
+<code>limits.max_session_lifetime_seconds</code>.</li>
+<li class=""><code>terminator</code> waits for such a request (from the timer or from a reload) and
+ends the session at the next transaction boundary (see
+<a href="#lifecycle" class="">Lifecycle</a>).</li>
+</ul>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="threads">Threads<a href="#threads" class="hash-link" aria-label="Direct link to Threads" title="Direct link to Threads" translate="no">​</a></h3>
+<p>The proxy is one Lwt event loop: code that blocks blocks every session. Two
+things would, so they run on a bounded pool of system threads (<code>Offload</code>,
+<code>limits.worker_threads</code>, default the number of CPUs clamped to 2..8):</p>
+<ul>
+<li class=""><strong>Verification.</strong> <code>Haltsql.verify</code> waits for the parser&#x27;s own worker pool
+and then analyses the statement. <code>handle_client_message</code> hands
+<code>Enforce.simple</code> / <code>Enforce.parse</code> to the pool and waits for the verdict.</li>
+<li class=""><strong>Audit writes</strong> to <code>stdout</code> and <code>file</code> sinks, which are blocking <code>write</code>
+calls (see <a href="#audit-and-logs" class="">Audit and logs</a>).</li>
+</ul>
+<p>Ordering does not change. <code>client_loop</code> handles one message at a time and
+does not read the next one until the current one is verified, audited and
+forwarded (or replaced), so pipelined <code>Parse</code> / <code>Bind</code> / <code>Execute</code> reach the
+upstream in the client&#x27;s order; only <em>other</em> sessions run while one waits.
+<code>upstream_loop</code> keeps relaying responses to earlier segments meanwhile, which
+is the same interleaving <code>Stmt_state</code> already handled for a <code>Bind</code> waiting on
+an earlier <code>Parse</code>. A pool job cannot be cancelled: if the session ended
+while its job ran, the result is discarded and nothing is forwarded.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="simple-protocol">Simple protocol<a href="#simple-protocol" class="hash-link" aria-label="Direct link to Simple protocol" title="Direct link to Simple protocol" translate="no">​</a></h3>
+<p>A <code>Query</code> message is verified as a whole (<code>Enforce.simple</code>). It is denied if
+the verdict denies, or if the verdict has <code>bind_params</code>: the simple protocol
+has no <code>Bind</code> message, so the proxy has no way to supply tenant values. The
+denial carries <code>E_PARAM_UNBOUND</code> and a hint to use a prepared statement.</p>
+<p>When <code>allow_transaction_control</code> is on (the default), plain <code>BEGIN</code>,
+<code>START TRANSACTION [modes]</code>, <code>COMMIT</code>, <code>END</code>, <code>ROLLBACK</code> and <code>ABORT</code> pass
+without a policy check, so drivers work outside autocommit. The match is exact
+token by token (<code>Enforce.transaction_control</code>): comments, quotes, savepoints,
+<code>AND CHAIN</code> and <code>PREPARE TRANSACTION</code> do not match and go to the policy.</p>
+<h3 class="anchor anchorTargetStickyNavbar_Vzrq" id="extended-protocol">Extended protocol<a href="#extended-protocol" class="hash-link" aria-label="Direct link to Extended protocol" title="Direct link to Extended protocol" translate="no">​</a></h3>
+<p>This is where tenancy is enforced. The policy proves that each tenancy
+predicate compares the tenant column with a parameter such as <code>$1</code>, and the
+verdict&#x27;s <code>bind_params</code> names those parameter positions. The proxy then fills
+those positions itself.</p>
+<!-- -->
+<p><strong>Parse.</strong> <code>Enforce.parse</code> verifies the SQL and the verdict is audited.</p>
+<ul>
+<li class="">Denied: the message is replaced by a denial (see below).</li>
+<li class="">Allowed, but the named statement already exists: refused with
+<code>42P05 PROXY_STATEMENT_EXISTS</code>. The proxy never lets a second <code>Parse</code>
+silently change what an existing name means.</li>
+<li class="">Allowed: the verdict is recorded as pending for that statement name, and
+the <code>Parse</code> is forwarded.</li>
+</ul>
+<p><strong>Declared parameter types.</strong> A <code>Parse</code> may declare a type for each
+parameter, and PostgreSQL decodes the <code>Bind</code> value with that type. A declared
+type such as <code>float8</code>, <code>name</code> or <code>&quot;char&quot;</code> could change how the injected tenant
+value is read (rounding, truncation). So
+<code>Enforce.reset_tenancy_param_types</code> sets the declared type of every tenancy
+parameter to <code>0</code> (unspecified), and the server infers it from the tenant
+predicate. Other parameters keep their declared types. If nothing changed,
+the original bytes are forwarded.</p>
+<p><strong>Bind.</strong> The proxy looks up the statement&#x27;s verdict. An unknown statement is
+refused with <code>26000 PROXY_STATEMENT_UNKNOWN</code>. If the verdict has no
+<code>bind_params</code>, the <code>Bind</code> is forwarded unchanged. Otherwise <code>Enforce.bind</code>:</p>
+<ol>
+<li class="">checks that the <code>Bind</code> supplies every tenancy parameter position;</li>
+<li class="">refuses binary format for a tenancy parameter (only text format is
+allowed, so the value cannot be reinterpreted);</li>
+<li class="">refuses conflicting tenancy values for one position;</li>
+<li class=""><strong>replaces</strong> each tenancy parameter&#x27;s value with the session&#x27;s context
+value, whatever the client sent. A single value is sent as is. A set of
+values is sent as a PostgreSQL array literal (<code>{&quot;a&quot;,&quot;b&quot;}</code>).</li>
+</ol>
+<p>A problem in steps 1 to 3 is a denial with <code>E_PARAM_UNBOUND</code>. The client
+cannot make the proxy skip the rewrite: any shape it cannot rewrite safely is
+refused.</p>
+<p><strong>Execute.</strong> A verdict is recorded at <code>Parse</code>, but a prepared statement can
+run any number of times. Each <code>Execute</code> therefore writes an <code>execute</code> audit
+record before it is forwarded: the portal, the statement the portal was bound
+from, that statement&#x27;s <code>sql_sha256</code> and fingerprint, and the row limit, never
+parameter values. The session keeps a small portal table for this (filled at
+<code>Bind</code>, emptied on <code>Close</code>, when the statement is closed, and when the
+transaction that owned the portal has ended), so a portal the proxy did not
+bind is recorded with a <code>null</code> statement instead of a guessed one. If the
+record cannot be written under <code>fail_closed</code>, the <code>Execute</code> is replaced by a
+denial like any other refused message.</p>
+<p><strong>Other messages.</strong> <code>Describe</code>, <code>Close</code>, <code>Flush</code> and <code>Sync</code> are validated and
+relayed. <code>Close</code> of a statement removes its verdict right away (removing
+early is safe, because a missing entry can only cause a denial).</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="denials-and-ordering">Denials and ordering<a href="#denials-and-ordering" class="hash-link" aria-label="Direct link to Denials and ordering" title="Direct link to Denials and ordering" translate="no">​</a></h2>
+<p>Clients pipeline. A driver may send <code>Parse</code>, <code>Bind</code>, <code>Execute</code> for three
+statements and one <code>Sync</code> before reading anything. If the proxy wrote an
+error to the client directly, it could overtake the responses to earlier
+messages that the server has not answered yet. The driver would then pair
+responses with the wrong requests.</p>
+<p>Instead, the proxy lets PostgreSQL produce the error at the right position:</p>
+<ol>
+<li class="">It generates a random token <code>haltsql_deny_&lt;16 random bytes in hex&gt;</code> and
+stores it, with the denial&#x27;s error fields, on the current segment.</li>
+<li class="">It forwards a message that cannot parse in place of the denied one:
+<ul>
+<li class="">simple protocol: a <code>Query</code> whose text is the token;</li>
+<li class="">extended protocol: a <code>Parse</code> whose statement name and query are the
+token. The session then enters <strong>discarding</strong> mode and drops every
+client message up to the next <code>Sync</code>, as PostgreSQL itself does after an
+error.</li>
+</ul>
+</li>
+<li class="">PostgreSQL answers with a syntax error at exactly that point in the
+stream, and skips to <code>Sync</code> on its own.</li>
+<li class=""><code>upstream_loop</code> sees an <code>ErrorResponse</code> whose message contains the token,
+and sends the stored denial fields to the client instead.</li>
+</ol>
+<!-- -->
+<p>The client sees a normal PostgreSQL error, in the right position, and the
+connection stays usable. Inside a transaction the denial aborts the
+transaction, exactly like a real permission error. The random token is new for
+every denial and never reaches the client.</p>
+<p>The error the client sees:</p>
+<table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td><code>S</code>, <code>V</code></td><td><code>ERROR</code></td></tr><tr><td><code>C</code></td><td><code>deny_sqlstate</code> (default <code>42501</code>)</td></tr><tr><td><code>M</code></td><td><code>haltsql: query denied by policy &quot;&lt;name&gt;&quot;: &lt;first reason&gt;</code></td></tr><tr><td><code>D</code></td><td><code>HaltSQL reasons: &lt;codes&gt;</code></td></tr><tr><td><code>H</code></td><td>the first reason&#x27;s hint, when there is one</td></tr></tbody></table>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="statement-bookkeeping">Statement bookkeeping<a href="#statement-bookkeeping" class="hash-link" aria-label="Direct link to Statement bookkeeping" title="Direct link to Statement bookkeeping" translate="no">​</a></h2>
+<p>The proxy must know, for every <code>Bind</code>, which verdict applies to the statement
+it names. That is harder than it sounds: a <code>Parse</code> only takes effect when the
+server answers <code>ParseComplete</code>, and after an error the server ignores
+messages until <code>Sync</code>. <code>Stmt_state</code> models this exactly.</p>
+<ul>
+<li class="">Messages are grouped into <strong>segments</strong>: everything up to a <code>Sync</code> (or one
+simple <code>Query</code>) is one segment.</li>
+<li class=""><code>Parse</code> and <code>Close</code> are queued as pending operations of the current segment.</li>
+<li class=""><code>ParseComplete</code> commits the head operation&#x27;s verdict to the committed table.
+<code>CloseComplete</code> removes one.</li>
+<li class=""><code>ErrorResponse</code> drops the remaining pending operations of the head segment
+(the server will ignore them). <code>ReadyForQuery</code> closes the head segment.</li>
+<li class="">A <code>Bind</code> looks in the current segment first, then the committed table. If
+the name has a pending operation in an <strong>earlier</strong> segment, the <code>Bind</code> waits
+until the server has answered it.</li>
+<li class="">A missing entry always denies. Bookkeeping can only err towards denial, and
+a client cannot get one statement&#x27;s tenancy positions applied to another
+statement.</li>
+<li class="">A simple <code>Query</code> destroys the unnamed statement, as PostgreSQL does. An
+unnamed <code>Parse</code> replaces it.</li>
+<li class="">More than 10,000 pending segments or operations ends the session with
+<code>54000 too many pipelined statements</code>.</li>
+</ul>
+<!-- -->
+<p><code>ConnectingUpstream</code> includes the <code>SHOW search_path</code> round trip: the client
+sees its first <code>ReadyForQuery</code> only after it. In <code>Ending</code> the relay works as
+before (statements are still verified, under the session&#x27;s own policy) until
+the upstream reports <code>ReadyForQuery</code> with status idle and nothing is in
+flight.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="cancel-requests">Cancel requests<a href="#cancel-requests" class="hash-link" aria-label="Direct link to Cancel requests" title="Direct link to Cancel requests" translate="no">​</a></h2>
+<p>PostgreSQL cancels a running query through a separate connection that sends
+the backend&#x27;s (pid, key). The proxy must not hand out the upstream&#x27;s real pid
+and key, and must not let one client cancel another&#x27;s queries.</p>
+<ul>
+<li class="">During startup, the upstream&#x27;s <code>BackendKeyData</code> is replaced with a
+proxy-issued pair: a random non-zero 30-bit pid and a random 32-bit key.
+The process-wide cancel table maps it to the upstream pair.</li>
+<li class="">A <code>CancelRequest</code> is looked up by pid, and its key is compared in constant
+time. On a match, <code>Upstream.send_cancel</code> forwards the upstream pair over a
+fresh upstream connection (with TLS if configured). Wrong keys and unknown
+pids are logged and ignored.</li>
+<li class="">The entry is removed when the session ends.</li>
+</ul>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="copy-functioncall-and-other-messages">COPY, FunctionCall and other messages<a href="#copy-functioncall-and-other-messages" class="hash-link" aria-label="Direct link to COPY, FunctionCall and other messages" title="Direct link to COPY, FunctionCall and other messages" translate="no">​</a></h2>
+<table><thead><tr><th>Message</th><th>Handling</th><th>Why</th></tr></thead><tbody><tr><td><code>FunctionCall</code> (fastpath)</td><td>Denied in-band with <code>PROXY_FUNCTION_CALL</code>, through the same token trick (a simple <code>Query</code> with the token)</td><td>It calls a function by OID without SQL, so there is nothing to verify</td></tr><tr><td><code>CopyData</code>, <code>CopyDone</code>, <code>CopyFail</code> from the client</td><td><code>FATAL 08P01</code>, connection closed</td><td><code>COPY</code> statements are already denied by the policy (<code>E_STATEMENT_KIND</code>)</td></tr><tr><td>Upstream enters COPY mode anyway</td><td><code>FATAL 08P01</code>, connection closed</td><td>Defense in depth</td></tr><tr><td>Unexpected <code>R</code>, <code>K</code>, <code>v</code> from upstream after startup</td><td><code>FATAL 08P01</code></td><td>The proxy has lost protocol sync</td></tr><tr><td>Unknown types, malformed or oversized messages</td><td><code>FATAL 08P01</code> (oversize is checked against <code>limits.max_message_bytes</code>)</td><td>Never guess at bytes it cannot parse</td></tr><tr><td><code>Terminate</code></td><td>Forwarded, session ends</td><td></td></tr></tbody></table>
+<p>Idle sessions are closed after <code>limits.idle_timeout_seconds</code> (off by
+default) with <code>FATAL 57P05</code>, but only when no request is in flight.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="audit-and-logs">Audit and logs<a href="#audit-and-logs" class="hash-link" aria-label="Direct link to Audit and logs" title="Direct link to Audit and logs" translate="no">​</a></h2>
+<p><code>Paudit</code> writes the audit log. Every verified statement produces one record,
+including statements let through by the transaction-control allowlist, and
+every forwarded <code>Execute</code> produces one more:</p>
+<div class="language-json codeBlockContainer_Ckt0 theme-code-block" style="--prism-color:#393A34;--prism-background-color:#f6f8fa"><div class="codeBlockContent_QJqH"><pre tabindex="0" class="prism-code language-json codeBlock_bY9V thin-scrollbar" style="color:#393A34;background-color:#f6f8fa"><code class="codeBlockLines_e6Vv"><div class="token-line" style="color:#393A34"><span class="token punctuation" style="color:#393A34">{</span><span class="token property" style="color:#36acaa">&quot;ts&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;event&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;statement&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;session&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;49fd05aacd53&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;user&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;agent&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"> </span><span class="token property" style="color:#36acaa">&quot;policy&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;proxy-test&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;policy_version&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;sha256:...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;protocol&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;extended&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"> </span><span class="token property" style="color:#36acaa">&quot;allowed&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token boolean" style="color:#36acaa">false</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;reasons&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token punctuation" style="color:#393A34">[</span><span class="token string" style="color:#e3116c">&quot;E_COLUMN_DENIED&quot;</span><span class="token punctuation" style="color:#393A34">]</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;shadow_reasons&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token punctuation" style="color:#393A34">[</span><span class="token punctuation" style="color:#393A34">]</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"> </span><span class="token property" style="color:#36acaa">&quot;sql_sha256&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;fingerprint&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;tables&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token punctuation" style="color:#393A34">[</span><span class="token string" style="color:#e3116c">&quot;app.users&quot;</span><span class="token punctuation" style="color:#393A34">]</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"> </span><span class="token property" style="color:#36acaa">&quot;bind_params&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token punctuation" style="color:#393A34">[</span><span class="token number" style="color:#36acaa">1</span><span class="token punctuation" style="color:#393A34">]</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;statement&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;prev_hash&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;&lt;64 hex&gt;&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;hash&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;&lt;64 hex&gt;&quot;</span><span class="token punctuation" style="color:#393A34">}</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"></span><span class="token punctuation" style="color:#393A34">{</span><span class="token property" style="color:#36acaa">&quot;ts&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;event&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;execute&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;session&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;49fd05aacd53&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;user&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;agent&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"> </span><span class="token property" style="color:#36acaa">&quot;policy&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;proxy-test&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;policy_version&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;sha256:...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;protocol&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;extended&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"> </span><span class="token property" style="color:#36acaa">&quot;portal&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;statement&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;s1&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;sql_sha256&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;fingerprint&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;...&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token plain"></span><br></div><div class="token-line" style="color:#393A34"><span class="token plain"> </span><span class="token property" style="color:#36acaa">&quot;max_rows&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token number" style="color:#36acaa">0</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;prev_hash&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;&lt;64 hex&gt;&quot;</span><span class="token punctuation" style="color:#393A34">,</span><span class="token property" style="color:#36acaa">&quot;hash&quot;</span><span class="token operator" style="color:#393A34">:</span><span class="token string" style="color:#e3116c">&quot;&lt;64 hex&gt;&quot;</span><span class="token punctuation" style="color:#393A34">}</span><br></div></code></pre></div></div>
+<ul>
+<li class=""><code>bind_params</code> lists parameter positions only, never values. <code>execute</code>
+records carry no parameter values either.</li>
+<li class="">Proxy-level refusals have their own events (<code>bind</code>, <code>parse</code>,
+<code>function_call</code>) with <code>reasons</code> and <code>message</code>.</li>
+<li class="">The SQL text appears only with <code>audit.log_raw_sql: true</code>.</li>
+<li class="">Operational logs (<code>Plog</code>) go to stderr as JSON lines. Neither stream
+contains passwords, verifiers, SCRAM messages, keys or bind values.</li>
+</ul>
+<p><strong>Hash chain.</strong> Records are sealed with the same <code>Audit_chain</code> code as the
+<code>haltsql-server</code> audit log: <code>hash = sha256_hex(prev_hash ^ L)</code>, <code>L</code> being the
+compact JSON of the record without <code>hash</code>, and the first record of a chain
+has 64 zeros as <code>prev_hash</code>. Each sink (<code>stdout</code>, <code>file</code>, <code>s3</code>, <code>gcs</code>) keeps
+its own chain; a file sink continues the chain of the existing file across
+restarts, and refuses to start on a file whose last line is not a sealed
+record. <code>haltsql audit verify</code> checks any of them.</p>
+<p><strong>A record that cannot be written blocks the statement.</strong> With the default
+<code>on_error: fail_closed</code>, <code>Paudit.record_async</code> returns an error and the
+session replaces the statement (or the <code>Execute</code>) with a refusal: <code>ERROR</code>,
+SQLSTATE <code>58030</code>, <code>PROXY_AUDIT_UNAVAILABLE</code>, delivered in-band through the
+same token mechanism as a policy denial. Nothing reaches the database without
+its audit record, and a denial that cannot be recorded is refused the same
+way. <code>buffer</code> queues records in memory up to <code>max_buffer_records</code> and refuses
+beyond that; <code>drop</code> discards, counts and logs. See
+<a class="" href="/docs/proxy#failure-policy-on_error">../proxy.md</a>.</p>
+<p><strong>Order and threads.</strong> <code>record_async</code> takes a process-wide FIFO lock, stamps
+the record, and writes <code>stdout</code>/<code>file</code> sinks on an <code>Offload</code> thread; object
+sinks append to their in-memory batch (and spool) on the event loop, where
+their uploader lives. One writer at a time, served in arrival order, means
+that in every sink the chain order, the timestamp order and the order in
+which statements were accepted are the same. The session waits for the
+outcome before it forwards, which is what keeps <code>fail_closed</code> true with the
+write off the loop. The retry loop that drains a <code>buffer</code> and the final flush
+at shutdown take the same lock.</p>
+<h2 class="anchor anchorTargetStickyNavbar_Vzrq" id="lifecycle">Lifecycle<a href="#lifecycle" class="hash-link" aria-label="Direct link to Lifecycle" title="Direct link to Lifecycle" translate="no">​</a></h2>
+<ul>
+<li class=""><code>haltsql-proxy run -c FILE</code> loads and validates the config. <code>SIGHUP</code>, or a
+change to the config or a file it pulls in with <code>reload.watch: true</code>,
+reloads it (<code>Server.reload</code>). A configuration that does not load or
+validate is rejected and the current one stays in force. The listen
+address and the audit sinks only change with a restart.</li>
+<li class=""><strong>A session has one binding for life.</strong> It keeps the configuration snapshot
+it was accepted under; a reload never swaps the policy of an open session,
+because its upstream <code>search_path</code> was pinned for that policy and its
+prepared statements were verified under it.</li>
+<li class=""><strong>A reload ends the sessions it changes.</strong> Each authenticated session is
+registered with the listener (<code>Session.live</code>: principal, credential,
+binding, snapshot). After a reload, <code>Session.stale</code> compares it with the
+new configuration: user or certificate identity removed, SCRAM verifier or
+client CA bundle changed, bound to another policy, policy content
+(<code>version</code>) or context changed, upstream changed, or
+<code>allow_transaction_control</code> changed. Such a session is asked to end; all
+others continue untouched. <code>reload.terminate_changed_sessions: false</code>
+turns this off.</li>
+<li class=""><strong>Every session ends after <code>limits.max_session_lifetime_seconds</code></strong>
+(default one hour, <code>0</code> for no limit), which bounds how long anything a
+reload does not see can stay in effect.</li>
+<li class=""><strong>Ending happens at a transaction boundary.</strong> The session goes on until the
+upstream reports <code>ReadyForQuery</code> with transaction status idle and no
+segment is in flight (immediately, if it is already there). Then the
+client gets <code>FATAL 57P01</code> (<code>admin_shutdown</code>, what <code>pg_terminate_backend</code>
+produces, so drivers and pools reconnect) and both connections close. A
+client message that arrives at that point is neither verified nor
+forwarded. A session that does not get there within
+<code>limits.termination_grace_seconds</code> (default 30) is closed anyway, so
+holding a transaction open does not keep an old policy alive; the upstream
+rolls the transaction back.</li>
+<li class="">New connections above <code>limits.max_connections</code>, or above
+<code>limits.max_unauthenticated_per_ip</code> for their address, get <code>FATAL 53300</code>.</li>
+<li class="">On <code>SIGTERM</code> or <code>SIGINT</code> the proxy stops accepting, lets sessions finish
+for <code>shutdown_grace_seconds</code>, closes the rest, flushes the audit sinks and
+exits <code>0</code>.</li>
+</ul>
+<p>Related pages: <a class="" href="/docs/how-it-works/deployment-modes">deployment-modes.md</a>,
+<a class="" href="/docs/how-it-works/tenancy-proof">tenancy-proof.md</a>,
+<a class="" href="/docs/how-it-works/verification-pipeline">verification-pipeline.md</a>,
+<a class="" href="/docs/defense-in-depth">../defense-in-depth.md</a>.</p></div></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href="/docs/how-it-works/deployment-modes"><div class="pagination-nav__sublabel">Previous</div><div class="pagination-nav__label">Deployment modes</div></a><a class="pagination-nav__link pagination-nav__link--next" href="/docs/how-it-works/server-internals"><div class="pagination-nav__sublabel">Next</div><div class="pagination-nav__label">Server internals</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_bqdL thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href="#architecture-and-trust" class="table-of-contents__link toc-highlight">Architecture and trust</a></li><li><a href="#startup-and-authentication" class="table-of-contents__link toc-highlight">Startup and authentication</a></li><li><a href="#the-enforcing-relay" class="table-of-contents__link toc-highlight">The enforcing relay</a><ul><li><a href="#threads" class="table-of-contents__link toc-highlight">Threads</a></li><li><a href="#simple-protocol" class="table-of-contents__link toc-highlight">Simple protocol</a></li><li><a href="#extended-protocol" class="table-of-contents__link toc-highlight">Extended protocol</a></li></ul></li><li><a href="#denials-and-ordering" class="table-of-contents__link toc-highlight">Denials and ordering</a></li><li><a href="#statement-bookkeeping" class="table-of-contents__link toc-highlight">Statement bookkeeping</a></li><li><a href="#cancel-requests" class="table-of-contents__link toc-highlight">Cancel requests</a></li><li><a href="#copy-functioncall-and-other-messages" class="table-of-contents__link toc-highlight">COPY, FunctionCall and other messages</a></li><li><a href="#audit-and-logs" class="table-of-contents__link toc-highlight">Audit and logs</a></li><li><a href="#lifecycle" class="table-of-contents__link toc-highlight">Lifecycle</a></li></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Learn</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/docs/quickstart">Quickstart</a></li><li class="footer__item"><a class="footer__link-item" href="/docs/how-it-works/architecture">How it works</a></li><li class="footer__item"><a class="footer__link-item" href="/docs/tenancy">Tenancy semantics</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Run it</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/docs/deployment">Deployment</a></li><li class="footer__item"><a class="footer__link-item" href="/docs/proxy">haltsql-proxy</a></li><li class="footer__item"><a class="footer__link-item" href="/docs/policy-bundles">Policy bundles</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Reference</div><ul class="footer__items clean-list"><li class="footer__item"><a class="footer__link-item" href="/docs/policy-reference">Policy reference</a></li><li class="footer__item"><a class="footer__link-item" href="/docs/reason-codes">Reason codes</a></li><li class="footer__item"><a class="footer__link-item" href="/docs/http-api">HTTP API</a></li></ul></div><div class="theme-layout-footer-column col footer__col"><div class="footer__title">Project</div><ul class="footer__items clean-list"><li class="footer__item"><a href="https://github.com/HaltSQL/HaltSQL" target="_blank" rel="noopener noreferrer" class="footer__link-item">GitHub<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li><li class="footer__item"><a href="https://github.com/HaltSQL/HaltSQL/blob/main/SECURITY.md" target="_blank" rel="noopener noreferrer" class="footer__link-item">Security policy<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li><li class="footer__item"><a href="https://github.com/HaltSQL/HaltSQL/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" class="footer__link-item">Contributing<svg width="13.5" height="13.5" aria-label="(opens in new tab)" class="iconExternalLink_nPIU"><use href="#theme-svg-external-link"></use></svg></a></li></ul></div></div><div class="footer__bottom text--center"><div class="footer__copyright">HaltSQL is licensed under MIT. Built with Docusaurus.</div></div></div></footer></div>
+</body>
+</html>
